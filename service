@@ -1,0 +1,124 @@
+The launchMode attribute specifies an instruction on how the activity should be launched into a task. There are four different launch modes you can assign to the launchMode attribute:
+"standard" (the default mode)Default. The system creates a new instance of the activity in the task from which it was started and routes the intent to it. The activity can be instantiated multiple times, each instance can belong to different tasks, and one task can have multiple instances."singleTop"If an instance of the activity already exists at the top of the current task, the system routes the intent to that instance through a call to its onNewIntent() method, rather than creating a new instance of the activity. The activity can be instantiated multiple times, each instance can belong to different tasks, and one task can have multiple instances (but only if the activity at the top of the back stack is not an existing instance of the activity).
+For example, suppose a task's back stack consists of root activity A with activities B, C, and D on top (the stack is A-B-C-D; D is on top). An intent arrives for an activity of type D. If D has the default "standard" launch mode, a new instance of the class is launched and the stack becomes A-B-C-D-D. However, if D's launch mode is "singleTop", the existing instance of D receives the intent through onNewIntent(), because it's at the top of the stack—the stack remains A-B-C-D. However, if an intent arrives for an activity of type B, then a new instance of B is added to the stack, even if its launch mode is "singleTop".
+Note: When a new instance of an activity is created, the user can press the Back button to return to the previous activity. But when an existing instance of an activity handles a new intent, the user cannot press the Back button to return to the state of the activity before the new intent arrived in onNewIntent().
+"singleTask"The system creates a new task and instantiates the activity at the root of the new task. However, if an instance of the activity already exists in a separate task, the system routes the intent to the existing instance through a call to its onNewIntent() method, rather than creating a new instance. Only one instance of the activity can exist at a time.
+Note: Although the activity starts in a new task, the Back button still returns the user to the previous activity.
+"singleInstance".Same as "singleTask", except that the system doesn't launch any other activities into the task holding the instance. The activity is always the single and only member of its task; any activities started by this one open in a separate task.
+
+ActivityStarter里面
+
+startActivityUnchecked
+
+调用getReusableIntentActivity,先看是否需要加入已经有的Task里面
+
+	对于singleTask/singleInstance模式，总是加入，2种种模式查找Activity的逻辑不一样
+
+		对于singleInstance，mRootActivityContainer.findActivity
+
+		对于SingleTask mRootActivityContainer.findTask
+
+     如果存在，则返回对应的Activity，不存在，则返回空
+
+getReusableIntentActivity返回非空的时候，找到对应的Task，调用其
+	task.performClearTaskForReuseLocked ，清空Task里面mStartActivity上的所有其它Activity
+
+	如果在栈中找到要启动的Activity，则直接调用deliverNewIntent(top)
+
+返回为空的时候，找到当前ActivityStack的top ActivityRecord
+	
+	如果是singleTop或singleTask, 且当前top就是要启动的Activity，则dontStart为true,调用deliverNewIntent
+
+剩下的逻辑走standar模式，总是创建一个新的Activity
+
+
+
+ZygoteInit里面，forkSystemServer方法通过反射调用SystemServer的main方法
+
+SystemServer.run
+
+先创建SystemServiceManager，管理所有SystemService的创建、启动以及生命周期事件处理
+
+startBootstrapServivce 启动android系统投入运行所需的关键服务最小集
+
+startCoreServices  启动系统投入运行所需的关键服务最小集以外的关键服务
+
+startOtherServices  启动其它服务
+
+LocalServices里面保存的服务，使用只能在同一个进程里面调用，不允许跨进程调用，注册的对象保存在一个ArrayMap对象sLocalServiceObjects ，是Hide，仅android系统内部
+
+ServiceManager 保存着Binder对象的服务注册，内部保存着一个ServiceManagerNative，作为native层的ServiceManager的代理，注册的服务通过Binder调用native层的servicemanager的addService方法，保存在svclist 链表里面
+
+启动过程中，通过2种不同的方式来注册系统服务，最终都是通过binder调用向native层的servicemanager注册
+
+ServiceManager的addService()   直接通过binder调用向native层的servicemanager注册
+SystemServiceManager的startService()  先走SystemService的生命周期方法，然后再通过publicBinderService向native层的servicemanager注册
+
+
+
+抽象类SystemService代表一个运行在system_server进程里面的服务，生命周期方法有
+onStart() 启动服务
+publicBinderService 对象提供接口，system_server里面的其它服务可以访问service内部方法
+onBootPhase 会被调用多次，表示被启动的各个阶段
+PHASE_WAIT_FOR_DEFAULT_DISPLAY = 100;
+PHASE_LOCK_SETTINGS_READY = 480;
+PHASE_SYSTEM_SERVICES_READY = 500;
+PHASE_DEVICE_SPECIFIC_SERVICES_READY = 520;
+PHASE_ACTIVITY_MANAGER_READY = 550;
+PHASE_THIRD_PARTY_APPS_CAN_START = 600;
+PHASE_BOOT_COMPLETED = 1000;
+
+
+frameworks/native/cmds/servicemanager/
+http://gityuan.com/2016/10/01/system_service_common/
+
+
+非系统服务
+
+startForeground 启动前台服务，
+
+每个前台服务必须显示优先级为PRIORITY_LOW或更高状态栏通知
+
+在API 28或更高的版本上，需要申明一个权限<uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+
+startService 允许服务无限期运行
+
+bindService 一个绑定的服务是CS结构中的service端，允许组件bind到服务上后，与服务进程IPC通信。
+一个绑定服务一般只在服务其它组件的时候才存活，不会一直在后台运行，应该显式的调用stopSelf或stopService来停止服务，
+在服务端，需要实现onBind方法，返回一个IBinder对象,客户端用此对象来与服务端进行交互
+在客户端，需要实现一个ServiceConnection回调，在bindService的时候作为参数传入，客户端在回调方法里面获取到服务端返回的IBinder对象
+如果想和远程服务(remote service)通信，可以使用Messenger来返回一个IBinder对象，利用Handler消息机制
+
+AIDL
+定义了在IPC过程中，客户端和服务端进行交互的接口，适用于多个Client与Service进行交互的场景，在Service端进行多线程处理，如果不需要进行多线程IPC，可以使用bindService来实现
+
+通过AIDL创建服务有3步：
+创建.aidl文件
+实现接口功能，android SDK工具生成了一个抽象的Stub实现，必须继承然后实现Stub里面的方法
+向Client端提供访问接口，实现onBinder方法，返回一个Stub对象
+
+在ActiveServices的final SparseArray<ServiceMap> mServiceMap 对象里面，保存着所有非系统服务，key为user id,value为ServiceMap
+ServiceMap保存着单个用户的所有服务信息
+
+ContextImpl.startService --> ContextImpl.startServiceCommon --> ActivityManagerService.startService --> ActiveServices.startServiceLocked --》1.ActiveServices.retrieveServiceLocked 创建一个新的ServiceRecord，添加到ServiceMap里面 
+2.--> ActiveService.startServiceInnerLocked --> bringUpServiceLocked --> realStartServiceLocked -->
+
+1.ActivityThread.scheduleCreateService --> handleCreateService 通过工厂方法创建一个Service实例，然后调用其attach,onCreate后，通过binder调用AMS的serviceDoneExecuting --> ActiveServices.serviceDoneExecuting 判断启动类型
+
+2.ActivityThread.sendServiceArgsLocked --> ActivityThread.scheduleServiceArgs --> ActivityThread.handleServiceArgs 在这个方法里面，调用onStartCommand方法
+
+
+ContextImpl.bindService --> ContextImpl.bindServiceCommon --> ActivityManagerService.bindIsolatedService --> ActiveServices.bindServiceLocked
+--> 
+1.retrieveServiceLocked 创建一个新的ServiceRecord，添加到ServiceMap里面
+
+2.当需要判断一个组件是否能启动，会一个权限判断的Intent,在callback里面异步调用bringUpServiceLocked，绑定但不启动服务，和startService的一个主要差异点，在bringUpServiceLocked方法里面，会判断是否是isolated的，由于传入的BIND_AUTO_CREATE，isolated为false，走和startService一样的流程realStartServiceLocked，注意：此时App的进程可能还没有创建，调用startProcessLocked创建应用进程，
+
+3.继续对启动flags进行判断处理，处理一些bind相关的，
+
+4.对于BIND_AUTO_CREATE类型，再次调用bringUpServiceLocked，如果成功，则返回，失败则调用connected重新bind
+
+https://developer.android.google.cn/guide
+http://gityuan.com/2015/11/21/binder-framework/
+http://gityuan.com/2015/11/15/binder-get-service/
+
