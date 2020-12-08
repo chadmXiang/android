@@ -1,38 +1,73 @@
-The launchMode attribute specifies an instruction on how the activity should be launched into a task. There are four different launch modes you can assign to the launchMode attribute:
-"standard" (the default mode)Default. The system creates a new instance of the activity in the task from which it was started and routes the intent to it. The activity can be instantiated multiple times, each instance can belong to different tasks, and one task can have multiple instances."singleTop"If an instance of the activity already exists at the top of the current task, the system routes the intent to that instance through a call to its onNewIntent() method, rather than creating a new instance of the activity. The activity can be instantiated multiple times, each instance can belong to different tasks, and one task can have multiple instances (but only if the activity at the top of the back stack is not an existing instance of the activity).
-For example, suppose a task's back stack consists of root activity A with activities B, C, and D on top (the stack is A-B-C-D; D is on top). An intent arrives for an activity of type D. If D has the default "standard" launch mode, a new instance of the class is launched and the stack becomes A-B-C-D-D. However, if D's launch mode is "singleTop", the existing instance of D receives the intent through onNewIntent(), because it's at the top of the stack—the stack remains A-B-C-D. However, if an intent arrives for an activity of type B, then a new instance of B is added to the stack, even if its launch mode is "singleTop".
-Note: When a new instance of an activity is created, the user can press the Back button to return to the previous activity. But when an existing instance of an activity handles a new intent, the user cannot press the Back button to return to the state of the activity before the new intent arrived in onNewIntent().
-"singleTask"The system creates a new task and instantiates the activity at the root of the new task. However, if an instance of the activity already exists in a separate task, the system routes the intent to the existing instance through a call to its onNewIntent() method, rather than creating a new instance. Only one instance of the activity can exist at a time.
-Note: Although the activity starts in a new task, the Back button still returns the user to the previous activity.
-"singleInstance".Same as "singleTask", except that the system doesn't launch any other activities into the task holding the instance. The activity is always the single and only member of its task; any activities started by this one open in a separate task.
+ContextImpl.getSystemService  获取系统服务，返回保存SystemServiceRegistry 类里面的系统服务，对外提供的接口，类似ActivityManager，里面有一个IActivityManager，通过Binder和ActivityManagerService的通信，
 
-ActivityStarter里面
+ServiceManager.getService 是一个hide类，不支持app使用，针对之前的版本，可以使用反射来调用
+https://stackoverflow.com/questions/41597003/how-to-get-a-service-from-servicemanager-in-android
 
-startActivityUnchecked
+从android P版本开始，对反射的使用有限制，对于预置三方应用可以通过添加白名单来解决限制
+http://gityuan.com/2019/01/26/hidden_api/
 
-调用getReusableIntentActivity,先看是否需要加入已经有的Task里面
+Google的提交记录
+https://android.googlesource.com/platform/art/+/b38988a227534ae17045dadedc24d2131d59b42d%5E1..b38988a227534ae17045dadedc24d2131d59b42d/
 
-	对于singleTask/singleInstance模式，总是加入，2种种模式查找Activity的逻辑不一样
 
-		对于singleInstance，mRootActivityContainer.findActivity
-
-		对于SingleTask mRootActivityContainer.findTask
-
-     如果存在，则返回对应的Activity，不存在，则返回空
-
-getReusableIntentActivity返回非空的时候，找到对应的Task，调用其
-	task.performClearTaskForReuseLocked ，清空Task里面mStartActivity上的所有其它Activity
-
-	如果在栈中找到要启动的Activity，则直接调用deliverNewIntent(top)
-
-返回为空的时候，找到当前ActivityStack的top ActivityRecord
-	
-	如果是singleTop或singleTask, 且当前top就是要启动的Activity，则dontStart为true,调用deliverNewIntent
-
-剩下的逻辑走standar模式，总是创建一个新的Activity
+获取的服务都是下面注册的，本地服务或Java服务
 
 
 
+
+
+Native层服务注册
+
+1.servicemanager启动
+文件路径：frameworks/native/cmds/servicemanager/
+
+.rc文件调用servicemanager.c的main方法
+1.调用bind.c的binder_open打开binder驱动
+2.成为上下文管理者binder_become_context_manager
+3.调用binder_loop进入无限循环，处理client端发来的请求
+4.注册服务和死亡通知
+
+在binder_open方法中
+1.通过系统调用open("/deve/binder",O_RDWR|O_CLOEXEC)
+2.通过系统调用ioctl获取binder版本信息
+3.通过系统调用mmap内存映射
+
+在binder_become_context_manager里面
+1.通过ioctl，传递BINDER_SET_CONTEXT_MGR指令，成为上下文管理者，整个系统只有一个
+
+servicemanager最核心的2个功能是查询和注册服务
+a)注册服务：记录服务名和handle信息
+b)查询服务：根据服务名查相应的handle信息
+
+每一个服务用svcinfo结构体来表示：
+struct svcinfo { 
+struct svcinfo *next; 
+uint32_t handle; //服务的handle值 
+struct binder_death death; 
+int allow_isolated; 
+size_t len; //名字长度 
+uint16_t name[0]; //服务名 
+};
+
+servicemanager启动，打开binder驱动，成为Context manager，句柄为0
+
+3.native服务注册过程
+
+3.1服务在注册的时候，会调用
+defaultServiceManager()->addService(String16("media.player"), new MediaPlayerService());
+
+
+3.2 在defaultServiceManager方法里面
+interface_cast<IServiceManager>(ProcessState::self()->getContextObject(nullptr));
+ProcessState::self()会创建ProcessState对象，然后根据传入的handle为0(代表service manager),返回BpBinder对象，进行interface_cast转换，最终返回BpServiceManager,然后调用其addService方法
+
+3.3 在BpServiceManager.addService方法里面
+status_t err = remote()->transact(ADD_SERVICE_TRANSACTION, data, &reply);
+其中remote()对象是BpBinder,最终会调用到IPCThreadState的transact方法
+remote()方法定义在BpRefBase,返回IBinder对象
+
+
+Java层服务注册
 ZygoteInit里面，forkSystemServer方法通过反射调用SystemServer的main方法
 
 SystemServer.run
@@ -47,13 +82,30 @@ startOtherServices  启动其它服务
 
 LocalServices里面保存的服务，使用只能在同一个进程里面调用，不允许跨进程调用，注册的对象保存在一个ArrayMap对象sLocalServiceObjects ，是Hide，仅android系统内部
 
-ServiceManager 保存着Binder对象的服务注册，内部保存着一个ServiceManagerNative，作为native层的ServiceManager的代理，注册的服务通过Binder调用native层的servicemanager的addService方法，保存在svclist 链表里面
+ServiceManager 保存着Binder对象的服务注册，内部保存着一个ServiceManagerNative，注册的服务通过Binder调用native层的servicemanager的addService方法，保存在svclist 链表里面
 
 启动过程中，通过2种不同的方式来注册系统服务，最终都是通过binder调用向native层的servicemanager注册
 
 ServiceManager的addService()   直接通过binder调用向native层的servicemanager注册
 SystemServiceManager的startService()  先走SystemService的生命周期方法，然后再通过publicBinderService向native层的servicemanager注册
 
+getIServiceManager
+ServiceManagerNative.asInterface(Binder.allowBlocking(BinderInteral.getContextObject()))
+
+static jobject android_os_BinderInternal_getContextObject(JNIEnv* env, jobject clazz)
+ {
+
+     sp<IBinder> b = ProcessState::self()->getContextObject(NULL);
+
+     return javaObjectForIBinder(env, b);
+
+ }
+
+然后调用ProcessState::getStrongProxyForHandle  ,返回BpBinder(0)
+
+BinderProxy内部有一个nativeData,是一个BinderProxyNativeData，保存着sp<IBinder> mObject; 是一个BpBinder对象，传入的句柄是0,代理着native层的servicemanager
+
+mRemote为BinderProxy对象，该BinderProxy对象对应于BpBinder(0)，其作为binder代理端，指向native层大管家service Manager。
 
 
 抽象类SystemService代表一个运行在system_server进程里面的服务，生命周期方法有
@@ -121,4 +173,52 @@ ContextImpl.bindService --> ContextImpl.bindServiceCommon --> ActivityManagerSer
 https://developer.android.google.cn/guide
 http://gityuan.com/2015/11/21/binder-framework/
 http://gityuan.com/2015/11/15/binder-get-service/
+
+
+接收方注册
+Context
+	registerReceiver
+	
+ContextImpl
+	registerReceiver
+		registerReceiverInternal
+			ActivityManager.getService().registerReceiver(
+
+ActivityManagerService			
+	registerReceiver	
+		--queue.enqueueParallelBroadcastLocked(r);
+		  queue.scheduleBroadcastsLocked();
+			
+BroadcastQueue                    
+				
+
+发送方
+BroadcastReceiver
+Context	
+	sendBroadcast
+
+ContextImpl
+	ActivityManager.getService().broadcastIntent
+	
+ActivityManagerService
+	broadcastIntent
+	--broadcastIntentLocked
+		--queue.enqueueParallelBroadcastLocked(r);
+          queue.scheduleBroadcastsLocked();
+
+BroadcastQueue
+	scheduleBroadcastsLocked
+		processNextBroadcast
+			--processNextBroadcastLocked
+				--processCurBroadcastLocked
+		
+ActivityTrhead
+	scheduleReceiver
+		--handleReceiver
+			--handleReceiver
+				--receiver.onReceive
+
+
+
+
 
