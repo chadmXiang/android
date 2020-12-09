@@ -1,0 +1,203 @@
+整个Binder机制分2级C/S结构，使用代理模式
+
+顶层设计，IBinder是Server端，IInterface是Client端，与Binder驱动进行交互
+
+扩展层，C/S 结构的IPC调用
+	在Server端，BBinder、BpBinder 是实现端和代理端，具体的与Binder驱动进行通讯的是	IPCThreadState和ProcessState，由android内部实现
+	在Client端，BnInterface和BpInterface实现端和代理端，提供了扩展的能力
+
+两层之间的交互，主要是通过代理端来实现的
+BpInterface.onAsBinder()   // 将IInterface对象转换成IBinder对象
+IInterface.interface_cast  // 将IBinder对象转换成IInterface对象,通过IMPLEMENT_META_INTERFACE
+ProcessState.getStrongProxyForHandle  // 根据句柄handle返回服务的BpBinder
+
+一次跨进程IPC调用主要有3个步骤实现
+1.服务注册，实现了BnInterface接口，完成第一次与Binder驱动的交互
+2.获取本地实现代理BpInterface，获取ISerivceManager，然后通过服务名找到句柄handle,然后通过getStrongProxyForHandle获取BpBinder，完成第二次与Binder驱动的交互
+3.获取到BpBinder后，再通过IPCThreadState的getAndExecuteCommand来获取命令，talkWithDriver执行具体的方法调用，完成第三次与Binder驱动的交互
+
+
+和Binder驱动进行交互的主要流程
+1.defaultServiceManager 获取ISerivceManager的代理BpServiceManager
+2.注册或获取服务都是通过BpServiceManager，对应addService和getService
+3.获取到服务句柄handle后，可以获取一个BpBinder对象(比如说BpMediaPlayerService)，调用其transact方法，最后都会调用到IPCThreadState的transact方法
+4.getAndExecuteCommand来获取命令，talkWithDriver通过ioctl与mDriverFD通信
+5.与Binder驱动进行数据交互，通过mIn和mOut来读写数据
+
+Binder Native层框架
+
+
+// 代表一个Remote对象的基础接口，与Binder驱动交互，内部机制
+class IBinder : public virtual RefBase
+
+	 virtual BBinder*        localBinder();
+     virtual BpBinder*       remoteBinder();
+
+// Remote对象的本地实现
+class BBinder : public IBinder
+
+// Remote对象的代理实现
+class BpBinder : public IBinder
+
+	virtual status_t    transact
+
+class BpRefBase : public virtual RefBase
+    // 返回一个IBinder对象
+	inline  IBinder*        remote()
+
+// Binder接口的基础类，定义了支持Binder调用的关键接口。当想定义一个新的接口时，必须继承此类
+template<typename INTERFACE> class BnInterface : public INTERFACE, public BBinder
+
+    // 将IBinder对象转换成IInterface对象
+	sp<INTERFACE> interface_cast(const sp<IBinder>& obj)
+	
+// IInterface的代理
+template<typename INTERFACE> class BpInterface : public INTERFACE, public BpRefBase
+
+    // 将IInterface对象转换成IBinder对象
+	virtual IBinder*            onAsBinder();
+
+// IInterface的本地
+class BnInterface : public INTERFACE, public BBinder
+
+    // 查询本地是否有IInerface实例，没有的话，创建一个代理对象BpInterface
+	virtual sp<IInterface>      queryLocalInterface(const String16& _descriptor);
+	
+
+前面的IBinder(与Binder驱动交互的server)和IInterface(与Binder驱动交互的client)只是定义了标准，具体的与Binder驱动进行通讯的是	IPCThreadState和ProcessState
+
+在ProcessState里面open_driver打开驱动，在IPCThreadState里面与talkWithDriver进行交互，并执行命令getAndExecuteCommand
+
+与Binder驱动交互的server端在android系统内部实现了，使用的时候主要是继承IInterface，实现自定义的功能
+
+class IPCThreadState
+
+    // 创建一个新的线程
+    IPCThreadState* IPCThreadState::self()
+	status_t            talkWithDriver(bool doReceive=true);
+	status_t            getAndExecuteCommand();
+	// 加入线程池
+	void IPCThreadState::joinThreadPool(bool isMain)
+	//每个线程都有一个IPCThreadState，每个IPCThreadState中都有一个mIn、一个mOut。成员变量mProcess保存了ProcessState变量(每个进程只有一个)。
+
+	// mIn 用来接收来自Binder设备的数据，默认大小为256字节；
+	// mOut用来存储发往Binder设备的数据，默认大小为256字节。
+	Parcel              mIn;
+    Parcel              mOut;
+	
+	
+class ProcessState : public virtual RefBase
+
+    static  sp<ProcessState>    self();
+	
+	// 打开驱动
+	static int open_driver(const char *driver)
+	
+	// 根据句柄handle返回服务的BpBinder
+	sp<IBinder> ProcessState::getStrongProxyForHandle(int32_t handle)
+
+	sp<IBinder>  getContextObject(const String16& name,const sp<IBinder>& caller);
+	
+	int                 mDriverFD;
+	
+// 继承此接口，添加自定义功能
+class IMediaPlayerService: public IInterface
+
+class BnMediaPlayerService: public BnInterface<IMediaPlayerService>
+
+	 virtual status_t    onTransact
+
+class BpMediaPlayerService: public BpInterface<IMediaPlayerService>
+
+class MediaPlayerService : public BnMediaPlayerService
+
+
+
+IServiceManager
+
+class IServiceManager : public IInterface
+
+class BpServiceManager : public BpInterface<IServiceManager>
+
+IMPLEMENT_META_INTERFACE(ServiceManager, "android.os.IServiceManager");
+
+	asInterface返回BpServiceManager
+
+
+Binder Java层框架
+
+public final class BinderProxy implements IBinder
+
+	// 把BpBinder对象地址保存到BinderProxy.mNativeData成员变量
+	private final long mNativeData;
+
+
+public class Binder implements IBinder 
+
+	private static native long getNativeBBinderHolder();
+	
+	 /**
+      * Raw native pointer to JavaBBinderHolder object. Owned by this Java object. Not null.
+      */
+     @UnsupportedAppUsage
+     private final long mObject;
+ 
+     private IInterface mOwner;
+
+android_util_Binder.cpp
+
+	 { "getNativeBBinderHolder", "()J", (void*)android_os_Binder_getNativeBBinderHolder },
+	 
+	 const char* const kBinderPathName = "android/os/Binder";
+	 
+	 int_register_android_os_Binder
+
+
+// 定义了和Remote Object对象进行交互的协议
+public interface IBinder
+
+class JavaBBinder : public BBinder
+
+class JavaBBinderHolder
+	
+	wp<JavaBBinder> mBinder;
+
+
+	在Java层里面，JavaBBinder和作用和BnInterface类似，都继承自BBinder
+
+在Java层有一个类似servicemanager的ServiceManager
+
+public final class ServiceManager 
+
+	private static IServiceManager sServiceManager;
+	
+	sServiceManager = ServiceManagerNative
+                 .asInterface(Binder.allowBlocking(BinderInternal.getContextObject()));
+
+public abstract class ServiceManagerNative extends Binder implements IServiceManager
+
+class ServiceManagerProxy implements IServiceManager 
+
+public interface IServiceManager extends IInterface
+
+
+
+template<typename SERVICE> class BinderService
+
+class IServiceManager : public IInterface
+
+class BpServiceManager : public BpInterface<IServiceManager>
+
+IMPLEMENT_META_INTERFACE(ServiceManager, "android.os.IServiceManager");
+
+	asInterface返回BpServiceManager
+
+
+
+
+frameworks/native/libs/binder/IServiceManager.cpp
+
+
+Java层、Native层 的服务注册和获取都是通过IServiceManager.defaultServiceManager获取IServiceManager对象，然后调用相应的方法来实现的
+
+BpServiceManager(0) ,找到servicemanager，然后与Binder驱动通讯调用servicemanager里面的方法
