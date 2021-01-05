@@ -1,0 +1,68 @@
+Android系统启动流程
+
+上电加载引导程序Bootloader
+
+装载和启动Linux内核
+
+内核启动后会寻找init.rc文件，然后启动init进程
+
+init进程 里面会启动Zygote进程 
+
+zygote进程里面会创建Java虚拟机，注册JNI方法，创建服务端Socket，启动SystemServer进程
+
+SystemServer进程启动，启动Binder线程池和各种系统服务
+
+init进程总结：
+
+创建和挂载启动所需的文件目录
+
+初始化和启动属性服务
+
+解析init.rc配置文件并启动Zygote进程
+
+
+在Zygote进程启动总结：
+
+创建Java虚拟机，注册JNI方法
+
+通过JNI调用ZygoteInit，进入Zygote Java框架层
+
+会启动Systemserver
+
+SystemServer进程总结：
+
+启动Binder线程池
+
+创建SystemServiceManager，用于对系统的服务进行创建、启动和生命周期管理
+
+启动各种系统服务
+
+
+recovery流程
+
+OTA应用下载好升级包后，会通过RecoverySystem往cache分区写数据
+
+开机 --> Bootload解析BCB 控制块，通过里面的命令来判断是否启动Recovery ，会先从misc分区来读取，如果没有，则读取cache分区的，读取完后会写入BCB，防止出现异常，一种掉电保护机制
+
+	--> 如果是的话，则进入recovery --> 校验包，通过包里面的签名文件，通过后，解压包里面的update-script升级脚本，用来控制升级流程，fork一个子进程用来执行这个脚本
+
+  update-script主要是分区擦除、挂载、设置目录权限，
+
+
+OTA升级成功后，会清空misc分区的内容，把BCB设置为空
+
+
+Java对象创建的过程：类加载检查 -- 分配内存  --  初始化对象的零值  -- 初始化对象头  -- 执行init方法
+
+Java类生命周期：加载 、验证、准备、解析、初始化、使用、卸载
+
+Java对象定位：句柄池、直接指针
+
+Java对象：对象头、实例数据、对齐填充
+
+对象头：mark word/指向类的指针、数组长度(只有数组对象才有)
+
+
+
+
+
