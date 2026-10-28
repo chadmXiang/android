@@ -1,0 +1,127 @@
+import type {ClassMapDef} from './types';
+
+/**
+ * 两张类图。画布 1840 × 740；卡片高度 52、行距 70。
+ * 同列持有关系自动走左侧"脊线"，跨列连线在 vias 里手工路由。
+ */
+export const SERVICES_MAP: ClassMapDef = {
+  id: 'services',
+  title: '四大服务关键类全景',
+  cardW: 210,
+  regions: [
+    {label: '应用进程（com.foo）', x: 15, y: 34, w: 285, h: 620, color: '#3b82f6'},
+    {label: 'system_server', x: 330, y: 34, w: 1495, h: 690, color: '#f59e0b'},
+    {label: 'ATMS', x: 345, y: 70, w: 290, h: 440, color: '#fb923c'},
+    {label: 'WMS（右列容器树为 ATMS / WMS 共用）', x: 650, y: 70, w: 455, h: 440, color: '#f59e0b'},
+    {label: 'AMS', x: 1127, y: 70, w: 330, h: 440, color: '#facc15'},
+    {label: 'PMS', x: 1477, y: 70, w: 330, h: 510, color: '#a78bfa'},
+  ],
+  classes: [
+    // 应用进程
+    {id: 'activity-thread', x: 35, y: 100, w: 250},
+    {id: 'application-thread', x: 35, y: 170, w: 250},
+    {id: 'at-h', x: 35, y: 240, w: 250},
+    {id: 'transaction-executor', x: 35, y: 310, w: 250},
+    {id: 'activity', x: 35, y: 380, w: 250},
+    {id: 'wm-global', x: 35, y: 450, w: 250},
+    {id: 'view-root-impl', x: 35, y: 520, w: 250},
+    {id: 'vri-w', x: 35, y: 590, w: 250},
+    // ATMS
+    {id: 'atms', x: 360, y: 100, w: 260},
+    {id: 'start-controller', x: 360, y: 170, w: 260},
+    {id: 'activity-starter', x: 360, y: 240, w: 260},
+    {id: 'task-supervisor', x: 360, y: 310, w: 260},
+    {id: 'lifecycle-manager', x: 360, y: 380, w: 260},
+    {id: 'wpc', x: 360, y: 450, w: 260},
+    // WMS 左列
+    {id: 'wms', x: 665, y: 100, w: 205},
+    {id: 'session', x: 665, y: 170, w: 205},
+    {id: 'surface-placer', x: 665, y: 240, w: 205},
+    {id: 'transition-controller', x: 665, y: 310, w: 205},
+    {id: 'sync-engine', x: 665, y: 380, w: 205},
+    // WMS 右列：容器树
+    {id: 'root-wc', x: 885, y: 100, w: 205},
+    {id: 'display-content', x: 885, y: 170, w: 205},
+    {id: 'task', x: 885, y: 240, w: 205},
+    {id: 'activity-record', x: 885, y: 310, w: 205},
+    {id: 'window-state', x: 885, y: 380, w: 205},
+    {id: 'ws-animator', x: 885, y: 450, w: 205},
+    // AMS
+    {id: 'ams', x: 1142, y: 100, w: 300},
+    {id: 'process-list', x: 1142, y: 170, w: 300},
+    {id: 'process-record', x: 1142, y: 240, w: 300},
+    {id: 'active-services', x: 1142, y: 310, w: 300},
+    {id: 'broadcast-queue', x: 1142, y: 380, w: 300},
+    {id: 'oom-adjuster', x: 1142, y: 450, w: 300},
+    // PMS
+    {id: 'pms', x: 1492, y: 100, w: 300},
+    {id: 'computer', x: 1492, y: 170, w: 300},
+    {id: 'component-resolver', x: 1492, y: 240, w: 300},
+    {id: 'pm-settings', x: 1492, y: 310, w: 300},
+    {id: 'package-setting', x: 1492, y: 380, w: 300},
+    {id: 'install-helper', x: 1492, y: 450, w: 300},
+    {id: 'permission-ms', x: 1492, y: 520, w: 300},
+  ],
+  extraRelations: [{from: 'display-content', to: 'task', kind: 'children', label: '经 TaskDisplayArea'}],
+  hide: ['wms>window-state', 'atms>transition-controller', 'window-state>session'],
+  vias: {
+    'process-record>application-thread': [[1120, 266], [1120, 14], [305, 14], [305, 180]],
+    'lifecycle-manager>application-thread': [[322, 406], [322, 212]],
+    'view-root-impl>session': [[643, 546], [643, 196]],
+    'window-state>vri-w': [[1098, 406], [1098, 670], [305, 670], [305, 616]],
+    'wpc>process-record': [[490, 690], [1116, 690], [1116, 276], [1140, 276]],
+    'ams>atms': [[1282, 20], [480, 20]],
+    'atms>ams': [[500, 26], [1302, 26]],
+    'task-supervisor>pms': [[632, 336], [632, 710], [1466, 710], [1466, 126]],
+    'atms>root-wc': [[646, 116], [646, 161], [985, 161]],
+    'activity-starter>activity-record': [[628, 280], [628, 301], [987, 301]],
+    'activity-record>wpc': [[877, 350], [877, 486]],
+  },
+};
+
+export const WM_CONTAINER_MAP: ClassMapDef = {
+  id: 'wm-containers',
+  title: 'WMS 容器体系 + 应用侧窗口',
+  cardW: 210,
+  regions: [
+    {label: 'system_server · com.android.server.wm', x: 8, y: 18, w: 1824, h: 524, color: '#f59e0b'},
+    {label: '应用进程', x: 8, y: 560, w: 1824, h: 172, color: '#3b82f6'},
+  ],
+  classes: [
+    {id: 'config-container', x: 560, y: 40},
+    {id: 'window-container', x: 560, y: 140},
+    {id: 'surface-animator', x: 880, y: 140},
+    {id: 'surface-control', x: 1140, y: 140},
+    {id: 'root-wc', x: 20, y: 250},
+    {id: 'display-area', x: 300, y: 250},
+    {id: 'task-fragment', x: 620, y: 250},
+    {id: 'window-token', x: 880, y: 250},
+    {id: 'window-state', x: 1140, y: 250},
+    {id: 'wms', x: 1420, y: 250},
+    {id: 'root-display-area', x: 160, y: 350},
+    {id: 'task-display-area', x: 390, y: 350},
+    {id: 'task', x: 620, y: 350},
+    {id: 'activity-record', x: 880, y: 350},
+    {id: 'ws-animator', x: 1140, y: 350},
+    {id: 'session', x: 1420, y: 350},
+    {id: 'display-content', x: 160, y: 450},
+    // 应用进程
+    {id: 'activity', x: 20, y: 600},
+    {id: 'phone-window', x: 250, y: 600},
+    {id: 'wm-global', x: 480, y: 600},
+    {id: 'view-root-impl', x: 710, y: 600},
+    {id: 'vri-w', x: 940, y: 600},
+    {id: 'bbq', x: 1170, y: 600},
+    {id: 'choreographer', x: 1400, y: 600},
+  ],
+  hide: ['view-root-impl>surface-control'],
+  vias: {
+    'view-root-impl>bbq': [[815, 690], [1275, 690]],
+    'view-root-impl>choreographer': [[830, 705], [1505, 705]],
+    'view-root-impl>session': [[800, 530], [1525, 530]],
+    'window-state>vri-w': [[1360, 295], [1360, 545], [1045, 545]],
+    'window-state>session': [[1385, 285], [1385, 376]],
+    'window-container>surface-control': [[760, 116], [1245, 116]],
+    'root-wc>display-content': [[60, 476]],
+  },
+};

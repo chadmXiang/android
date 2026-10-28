@@ -1,0 +1,44 @@
+# macOS / 编辑器
+.DS_Store
+._*
+.idea/
+.vscode/
+*.iml
+
+# Node.js / Python 依赖与缓存
+node_modules/
+.venv/
+.venv-*/
+__pycache__/
+*.py[cod]
+*.tsbuildinfo
+
+# Android / Gradle 构建产物与缓存
+.gradle/
+.kotlin/
+build/
+.externalNativeBuild/
+.cxx/
+captures/
+
+# 本机配置、凭证与签名私钥
+/agent.md
+local.properties
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+token.txt
+
+# 动画渲染与旁白生成产物
+/android-flow-anim/out/
+/android-flow-anim/public/narration/
+/android-flow-anim/src/generated/narration.ts
+/android-flow-anim/.tts-*.aiff
+/android-flow-anim/node_modules/
+
+# 运行日志
+*.log
+*.ips
+*.ips.synced

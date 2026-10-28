@@ -1,0 +1,34 @@
+{
+  "name": "android-flow-anim",
+  "private": true,
+  "scripts": {
+    "prepare": "node scripts/ensure-generated.mjs",
+    "dev": "remotion studio src/index.ts",
+    "render": "remotion render src/index.ts FrameLifecycle out/frame-lifecycle.mp4",
+    "still": "remotion still src/index.ts FrameLifecycle out/frame.png --frame=2400",
+    "render:launch": "remotion render src/index.ts AppLaunch out/app-launch.mp4",
+    "render:home": "remotion render src/index.ts HomeKey out/home-key.mp4",
+    "render:boot": "remotion render src/index.ts Boot out/boot.mp4",
+    "render:classes": "remotion render src/index.ts KeyClasses out/key-classes.mp4",
+    "explorer": "node scripts/ensure-generated.mjs && esbuild src/explorer/main.tsx --bundle --minify --jsx=automatic --define:process.env.NODE_ENV=\\\"production\\\" --outfile=out/explorer/explorer.js && cp src/explorer/index.html out/explorer/index.html",
+    "render:service": "remotion render src/index.ts ServiceAnr out/service-anr.mp4",
+    "render:input": "remotion render src/index.ts InputFlow out/input-flow.mp4",
+    "render:vgui": "remotion render src/index.ts VguiFlow out/vgui-flow.mp4",
+    "qa": "node scripts/qa.mjs",
+    "narrate": "node scripts/narrate.mjs",
+    "check": "node scripts/check.mjs",
+    "dev:tts": "REMOTION_NARRATION=1 remotion studio src/index.ts",
+    "render:service:tts": "REMOTION_NARRATION=1 remotion render src/index.ts ServiceAnr out/service-anr-tts.mp4",
+    "check:tts": "REMOTION_NARRATION=1 node scripts/check.mjs"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.0",
+    "remotion": "^4.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "typescript": "^5.4.0"
+  }
+}
